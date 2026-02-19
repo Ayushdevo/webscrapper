@@ -1,0 +1,14 @@
+# DataPulse AI Web Scraper — Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core (required)
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+# Pretty terminal output (optional but recommended)
+rich>=13.7.0
+
+# JS rendering via headless browser (optional)
+playwright>=1.40.0
+# After installing: playwright install chromium
