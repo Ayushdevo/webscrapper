@@ -226,8 +226,10 @@ class HTMLParser:
 
     def __init__(self, html: str, base_url: str = ""):
         self.soup = BeautifulSoup(html, "lxml")
-        self.base_url = base_url
         self.parsed_url = urlparse(base_url)
+        base = self.soup.find("base", href=True)
+        candidate = urljoin(base_url, base["href"].strip()) if base else base_url
+        self.base_url = candidate if urlparse(candidate).scheme in ("http", "https") else base_url
 
     # ── Meta ────────────────────────────────────────────────────
     def extract_meta(self) -> dict:
@@ -253,7 +255,7 @@ class HTMLParser:
 
         # Canonical
         canon = self.soup.find("link", rel="canonical")
-        meta["canonical"] = canon.get("href", "") if canon else ""
+        meta["canonical"] = urljoin(self.base_url, canon["href"]) if canon and canon.get("href") else ""
 
         # Structured data (JSON-LD)
         json_ld = []
