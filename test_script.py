@@ -147,3 +147,26 @@ def test_browser_navigation_uses_timeout(monkeypatch):
     script.fetch_with_playwright('https://example.com', wait_ms=0, timeout=7)
     browser.new_context.return_value.new_page.return_value.goto.assert_called_once_with(
         'https://example.com', wait_until='networkidle', timeout=7000)
+
+
+@pytest.mark.parametrize('kwargs', [
+    {'mode': 'invalid'}, {'export': 'pdf'}, {'url': 'file:///etc/passwd'},
+    {'url': 'https:///missing'}, {'url': 'httpx://example.com'},
+])
+def test_invalid_options_do_not_fetch(monkeypatch, tmp_path, kwargs):
+    scraper = DataPulseScraper(output_dir=tmp_path)
+    fetch = MagicMock(return_value='<p>hello</p>')
+    monkeypatch.setattr(scraper, 'fetch_html', fetch)
+    with pytest.raises(ValueError):
+        scraper.scrape(**{'url': 'https://example.com', **kwargs})
+    fetch.assert_not_called()
+
+@pytest.mark.parametrize('timeout', [0, -1, float('nan'), float('inf')])
+def test_invalid_timeout_rejected(tmp_path, timeout):
+    with pytest.raises(ValueError, match='timeout'):
+        DataPulseScraper(timeout=timeout, output_dir=tmp_path)
+
+@pytest.mark.parametrize('delay', [-1, float('nan'), float('inf')])
+def test_invalid_delay_rejected(tmp_path, delay):
+    with pytest.raises(ValueError, match='delay'):
+        DataPulseScraper(output_dir=tmp_path).batch_scrape([], delay=delay)

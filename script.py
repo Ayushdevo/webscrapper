@@ -20,6 +20,7 @@ USAGE:
 import argparse
 import csv
 import json
+import math
 import os
 import random
 import re
@@ -723,6 +724,8 @@ class DataPulseScraper:
 
     def __init__(self, use_playwright: bool = False, timeout: int = 20,
                  output_dir: str = "datapulse_output"):
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout must be a finite positive number")
         if use_playwright and not PLAYWRIGHT_OK:
             raise RuntimeError("Playwright requested but not installed. Run: pip install playwright && playwright install chromium")
         self.use_playwright = use_playwright
@@ -753,6 +756,13 @@ class DataPulseScraper:
         Returns:
             dict with extracted data + metadata
         """
+        if mode not in {"auto", "links", "text", "tables", "meta", "images", "custom"}:
+            raise ValueError(f"Unknown mode: {mode}")
+        if export not in {None, "json", "csv", "txt", "md", "all"}:
+            raise ValueError(f"Unknown export format: {export}")
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("url must be an absolute HTTP or HTTPS URL")
         log(f"Target: {url}", "step")
         log(f"Mode: {mode.upper()}", "step")
         t0 = time.time()
@@ -856,6 +866,8 @@ class DataPulseScraper:
     def batch_scrape(self, urls: list[str], mode: str = "auto",
                      export: Optional[str] = None, delay: float = 1.5) -> list[dict]:
         """Scrape multiple URLs with polite delay between requests."""
+        if not math.isfinite(delay) or delay < 0:
+            raise ValueError("delay must be a finite nonnegative number")
         results = []
         total = len(urls)
         log(f"Starting batch scrape: {total} URLs — mode: {mode}", "step")
