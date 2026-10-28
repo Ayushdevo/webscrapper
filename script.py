@@ -294,7 +294,7 @@ class HTMLParser:
 
             full_url = urljoin(self.base_url, href)
             parsed = urlparse(full_url)
-            if not parsed.scheme.startswith("http"):
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
                 continue
 
             if dedup and full_url in seen:

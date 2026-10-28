@@ -26,3 +26,10 @@ def test_document_base_url():
     external = HTMLParser('<base href="https://cdn.example.org/"><a href="x">X</a>',
                           'https://example.com/')
     assert external.extract_links()[0]['type'] == 'external'
+
+
+def test_only_http_links_with_hosts():
+    parser = HTMLParser('<a href="httpx://example.com/x">Bad</a>'
+                        '<a href="https:///missing">Bad</a>'
+                        '<a href="https://valid.example/x">Good</a>')
+    assert [x['href'] for x in parser.extract_links()] == ['https://valid.example/x']
