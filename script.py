@@ -129,6 +129,10 @@ class StealthSession:
         self.retries = retries
         self._rotate_ua()
 
+    def close(self):
+        """Release pooled connections, including after failed requests."""
+        self.session.close()
+
     def _rotate_ua(self):
         ua = random.choice(USER_AGENTS)
         self.session.headers.update({**STEALTH_HEADERS, "User-Agent": ua})
@@ -727,8 +731,11 @@ class DataPulseScraper:
         if self.use_playwright:
             return fetch_with_playwright(url)
         sess = StealthSession(timeout=self.timeout)
-        resp = sess.get(url)
-        return resp.text
+        try:
+            resp = sess.get(url)
+            return resp.text
+        finally:
+            sess.close()
 
     def scrape(self, url: str, mode: str = "auto",
                custom_prompt: str = "", export: Optional[str] = None) -> dict:

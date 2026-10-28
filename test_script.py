@@ -109,3 +109,19 @@ def test_export_filenames_unique_and_portable(tmp_path):
     assert ':' not in Path(first).name
     unsafe = exporter._filename('https://example.com', '../../outside', 'json')
     assert unsafe.parent == tmp_path
+
+
+@pytest.mark.parametrize('fail', [False, True])
+def test_fetch_closes_session(monkeypatch, tmp_path, fail):
+    session = MagicMock()
+    session.get.return_value.text = '<p>Hello</p>'
+    if fail:
+        session.get.side_effect = RuntimeError('network failed')
+    monkeypatch.setattr(script, 'StealthSession', lambda **kwargs: session)
+    scraper = DataPulseScraper(output_dir=tmp_path)
+    if fail:
+        with pytest.raises(RuntimeError, match='network failed'):
+            scraper.fetch_html('https://example.com/')
+    else:
+        assert scraper.fetch_html('https://example.com/') == '<p>Hello</p>'
+    session.close.assert_called_once()
