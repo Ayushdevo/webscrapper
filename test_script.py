@@ -90,3 +90,10 @@ def test_unicode_byte_metrics():
     metrics = parser.page_metrics()
     assert metrics['html_size_bytes'] == len(str(parser.soup).encode('utf-8'))
     assert metrics['text_size_bytes'] == len(parser.soup.get_text().encode('utf-8'))
+
+
+def test_nested_export_directory(tmp_path):
+    destination = tmp_path / 'new' / 'nested'
+    path = Exporter(destination).to_json({'text': 'hello'}, 'https://example.com/', 'text')
+    assert Path(path).parent == destination
+    assert json.loads(Path(path).read_text())['data'] == {'text': 'hello'}

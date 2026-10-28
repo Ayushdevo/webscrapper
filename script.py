@@ -594,7 +594,7 @@ def score_accuracy(data: dict, mode: str) -> float:
 class Exporter:
     def __init__(self, output_dir: str = "datapulse_output"):
         self.dir = Path(output_dir)
-        self.dir.mkdir(exist_ok=True)
+        self.dir.mkdir(parents=True, exist_ok=True)
 
     def _filename(self, url: str, mode: str, ext: str) -> Path:
         domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")[:30]
