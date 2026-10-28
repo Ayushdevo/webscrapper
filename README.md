@@ -74,6 +74,42 @@ Always ensure you follow:
 
 ---
 
+## Python CLI and regression checks
+
+The standalone scraper is `script.py`. Install its dependencies and run it directly:
+
+```bash
+python -m pip install -r requirements.txt
+python script.py --url https://example.com --mode text --export json
+```
+
+Use `--playwright` for pages that need JavaScript rendering after running
+`python -m playwright install chromium`. Requesting this engine without installing
+Playwright reports an error. `--timeout` sets its navigation timeout as well as
+the HTTP request timeout, in seconds.
+
+Batch input uses UTF-8, with one URL per line; blank lines and comments beginning
+with `#` (including indented comments) are ignored:
+
+```bash
+python script.py --batch urls.txt --mode auto --export all --output-dir reports/run
+```
+
+Run the regression suite without a browser, API keys, or live network requests:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+GitHub Actions runs these checks on Python 3.11 and 3.12 for pushes to `main`
+and pull requests. Coverage includes structured metadata, URL resolution, text,
+tables, images, Unicode, export integrity, request cleanup, configuration errors,
+and batch input. Browser navigation and HTTP fetches are mocked in these tests.
+The displayed accuracy score is a data-richness heuristic, not measured accuracy.
+
+---
+
 ## 👨‍💻 Author
 
 **Ayush Tiwari**  
