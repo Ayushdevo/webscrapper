@@ -45,3 +45,13 @@ def test_short_and_plain_text(html, expected):
     result = HTMLParser(html).extract_clean_text()
     assert result['paragraphs'] == expected
     assert result['word_count'] == len(' '.join(expected).split())
+
+
+@pytest.mark.parametrize('html, expected', [
+    ('<blockquote><p>A quoted sentence.</p></blockquote>', ['A quoted sentence.']),
+    ('<ul><li>Parent<ul><li>Child</li></ul>Tail</li></ul>', ['Parent', 'Child', 'Tail']),
+    ('<main><p>One <em>two</em> three.</p><p>One <em>two</em> three.</p></main>',
+     ['One two three.', 'One two three.']),
+])
+def test_nested_text_once(html, expected):
+    assert HTMLParser(html).extract_clean_text()['paragraphs'] == expected

@@ -336,10 +336,28 @@ class HTMLParser:
 
         # Extract text preserving paragraph structure
         paragraphs = []
-        for el in target.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "blockquote"]):
-            txt = el.get_text(separator=" ", strip=True)
-            if txt:
-                paragraphs.append(txt)
+        block_tags = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "blockquote"}
+
+        def collect(el):
+            # Flush text around nested blocks so each visible string occurs once.
+            pending = []
+            def flush():
+                text = " ".join(pending).strip()
+                if text:
+                    paragraphs.append(text)
+                pending.clear()
+            for child in el.children:
+                if getattr(child, "name", None):
+                    if child.name in block_tags or child.find(block_tags):
+                        flush()
+                        collect(child)
+                    else:
+                        pending.extend(child.stripped_strings)
+                elif str(child).strip():
+                    pending.append(str(child).strip())
+            flush()
+
+        collect(target)
         if not paragraphs:
             text = target.get_text(separator=" ", strip=True)
             if text:
