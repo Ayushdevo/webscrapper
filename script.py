@@ -262,7 +262,19 @@ class HTMLParser:
                 json_ld.append(json.loads(tag.string or "{}"))
             except Exception:
                 pass
-        meta["json_ld_types"] = [d.get("@type", "Unknown") for d in json_ld]
+        def types_in(value):
+            if isinstance(value, list):
+                for item in value:
+                    yield from types_in(item)
+            elif isinstance(value, dict):
+                types = value.get("@type", [])
+                if isinstance(types, str):
+                    types = [types]
+                if isinstance(types, list):
+                    yield from (t for t in types if isinstance(t, str))
+                yield from types_in(value.get("@graph", []))
+
+        meta["json_ld_types"] = list(dict.fromkeys(types_in(json_ld)))
 
         log(f"Extracted {len(meta)} meta fields", "success")
         return meta
