@@ -83,3 +83,10 @@ def test_image_url_normalization():
                         '<img src="   " data-src="/lazy.png">', 'https://example.com/')
     assert [x['src'] for x in parser.extract_images()] == [
         'https://example.com/cover.png', 'https://example.com/lazy.png']
+
+
+def test_unicode_byte_metrics():
+    parser = HTMLParser('<p>नमस्ते 🌍</p>')
+    metrics = parser.page_metrics()
+    assert metrics['html_size_bytes'] == len(str(parser.soup).encode('utf-8'))
+    assert metrics['text_size_bytes'] == len(parser.soup.get_text().encode('utf-8'))

@@ -450,8 +450,8 @@ class HTMLParser:
     def page_metrics(self) -> dict:
         all_text = self.soup.get_text()
         return {
-            "html_size_bytes": len(str(self.soup)),
-            "text_size_bytes": len(all_text),
+            "html_size_bytes": len(str(self.soup).encode("utf-8")),
+            "text_size_bytes": len(all_text.encode("utf-8")),
             "total_tags": len(self.soup.find_all()),
             "link_count": len(self.soup.find_all("a", href=True)),
             "image_count": len(self.soup.find_all("img")),
