@@ -168,7 +168,7 @@ class StealthSession:
 # PLAYWRIGHT FETCHER  (JS rendering)
 # ═══════════════════════════════════════════════════════════════
 
-def fetch_with_playwright(url: str, wait_ms: int = 2000) -> str:
+def fetch_with_playwright(url: str, wait_ms: int = 2000, timeout: float = 20) -> str:
     """Render page with headless Chromium and return HTML."""
     if not PLAYWRIGHT_OK:
         raise RuntimeError("Playwright not installed. Run: pip install playwright && playwright install chromium")
@@ -196,7 +196,7 @@ def fetch_with_playwright(url: str, wait_ms: int = 2000) -> str:
             window.chrome = { runtime: {} };
         """)
         page = ctx.new_page()
-        page.goto(url, wait_until="networkidle", timeout=30000)
+        page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
         page.wait_for_timeout(wait_ms)
 
         # Auto-scroll to trigger lazy loading
@@ -723,13 +723,15 @@ class DataPulseScraper:
 
     def __init__(self, use_playwright: bool = False, timeout: int = 20,
                  output_dir: str = "datapulse_output"):
-        self.use_playwright = use_playwright and PLAYWRIGHT_OK
+        if use_playwright and not PLAYWRIGHT_OK:
+            raise RuntimeError("Playwright requested but not installed. Run: pip install playwright && playwright install chromium")
+        self.use_playwright = use_playwright
         self.timeout = timeout
         self.exporter = Exporter(output_dir)
 
     def fetch_html(self, url: str) -> str:
         if self.use_playwright:
-            return fetch_with_playwright(url)
+            return fetch_with_playwright(url, timeout=self.timeout)
         sess = StealthSession(timeout=self.timeout)
         try:
             resp = sess.get(url)

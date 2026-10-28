@@ -125,3 +125,25 @@ def test_fetch_closes_session(monkeypatch, tmp_path, fail):
     else:
         assert scraper.fetch_html('https://example.com/') == '<p>Hello</p>'
     session.close.assert_called_once()
+
+
+def test_playwright_requested_but_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(script, 'PLAYWRIGHT_OK', False)
+    with pytest.raises(RuntimeError, match='Playwright'):
+        DataPulseScraper(use_playwright=True, output_dir=tmp_path)
+
+def test_playwright_receives_timeout(monkeypatch, tmp_path):
+    monkeypatch.setattr(script, 'PLAYWRIGHT_OK', True)
+    fetch = MagicMock(return_value='rendered')
+    monkeypatch.setattr(script, 'fetch_with_playwright', fetch)
+    assert DataPulseScraper(use_playwright=True, timeout=7, output_dir=tmp_path).fetch_html('https://example.com') == 'rendered'
+    fetch.assert_called_once_with('https://example.com', timeout=7)
+
+def test_browser_navigation_uses_timeout(monkeypatch):
+    monkeypatch.setattr(script, 'PLAYWRIGHT_OK', True)
+    playwright = MagicMock()
+    monkeypatch.setattr(script, 'sync_playwright', playwright, raising=False)
+    browser = playwright.return_value.__enter__.return_value.chromium.launch.return_value
+    script.fetch_with_playwright('https://example.com', wait_ms=0, timeout=7)
+    browser.new_context.return_value.new_page.return_value.goto.assert_called_once_with(
+        'https://example.com', wait_until='networkidle', timeout=7000)
