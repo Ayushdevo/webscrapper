@@ -954,6 +954,12 @@ EXAMPLES:
     return p
 
 
+def read_batch_urls(path: Path) -> list[str]:
+    """Read UTF-8 URL lists, allowing BOMs, blank lines and indented comments."""
+    lines = path.read_text(encoding="utf-8-sig").splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+
+
 def main():
     banner()
 
@@ -991,8 +997,7 @@ def main():
         if not batch_file.exists():
             log(f"Batch file not found: {args.batch}", "error")
             sys.exit(1)
-        urls = [line.strip() for line in batch_file.read_text().splitlines()
-                if line.strip() and not line.startswith("#")]
+        urls = read_batch_urls(batch_file)
         if not urls:
             log("No URLs found in batch file.", "error")
             sys.exit(1)
@@ -1001,7 +1006,7 @@ def main():
                                        export=args.export, delay=args.delay)
         if args.export:
             summary_path = Path(args.output_dir) / "batch_summary.json"
-            with open(summary_path, "w") as f:
+            with open(summary_path, "w", encoding="utf-8") as f:
                 json.dump(results, f, indent=2, ensure_ascii=False)
             log(f"Batch summary saved → {summary_path}", "success")
 

@@ -170,3 +170,9 @@ def test_invalid_timeout_rejected(tmp_path, timeout):
 def test_invalid_delay_rejected(tmp_path, delay):
     with pytest.raises(ValueError, match='delay'):
         DataPulseScraper(output_dir=tmp_path).batch_scrape([], delay=delay)
+
+
+def test_batch_file_unicode_bom_and_comments(tmp_path):
+    path = tmp_path / 'urls.txt'
+    path.write_text('﻿  # comment\n  https://example.com/नमस्ते  \n\n\t# another\nhttps://example.org', encoding='utf-8')
+    assert script.read_batch_urls(path) == ['https://example.com/नमस्ते', 'https://example.org']
