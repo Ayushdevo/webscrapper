@@ -97,3 +97,15 @@ def test_nested_export_directory(tmp_path):
     path = Exporter(destination).to_json({'text': 'hello'}, 'https://example.com/', 'text')
     assert Path(path).parent == destination
     assert json.loads(Path(path).read_text())['data'] == {'text': 'hello'}
+
+
+def test_export_filenames_unique_and_portable(tmp_path):
+    exporter = Exporter(tmp_path)
+    first = exporter.to_json({'n': 1}, 'https://example.com:8080/a', 'auto')
+    second = exporter.to_json({'n': 2}, 'https://example.com:8080/b', 'auto')
+    assert first != second
+    assert json.loads(Path(first).read_text())['data']['n'] == 1
+    assert json.loads(Path(second).read_text())['data']['n'] == 2
+    assert ':' not in Path(first).name
+    unsafe = exporter._filename('https://example.com', '../../outside', 'json')
+    assert unsafe.parent == tmp_path

@@ -29,6 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin, urlparse
+from uuid import uuid4
 
 # ── Optional rich console (pretty output) ────────────────────
 try:
@@ -597,9 +598,10 @@ class Exporter:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def _filename(self, url: str, mode: str, ext: str) -> Path:
-        domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")[:30]
+        domain = re.sub(r"[^A-Za-z0-9_-]+", "_", urlparse(url).hostname or "page")[:30]
+        safe_mode = re.sub(r"[^A-Za-z0-9_-]+", "_", mode)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return self.dir / f"{domain}_{mode}_{ts}.{ext}"
+        return self.dir / f"{domain}_{safe_mode}_{ts}_{uuid4().hex}.{ext}"
 
     def to_json(self, data: dict, url: str, mode: str) -> str:
         path = self._filename(url, mode, "json")
