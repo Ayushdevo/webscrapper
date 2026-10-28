@@ -427,11 +427,16 @@ class HTMLParser:
         images = []
         seen = set()
         for img in self.soup.find_all("img"):
-            src = img.get("src") or img.get("data-src") or img.get("data-lazy-src", "")
-            if not src or src in seen:
+            src = next((value.strip() for value in
+                        (img.get("src", ""), img.get("data-src", ""), img.get("data-lazy-src", ""))
+                        if value and value.strip()), "")
+            if not src:
                 continue
-            seen.add(src)
             full_src = urljoin(self.base_url, src)
+            parsed = urlparse(full_src)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc or full_src in seen:
+                continue
+            seen.add(full_src)
             images.append({
                 "src": full_src,
                 "alt": img.get("alt", ""),

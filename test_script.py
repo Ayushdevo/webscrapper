@@ -75,3 +75,11 @@ def test_table_body_th_does_not_become_column_heading():
                        '<tr><th>B</th><td>2</td></tr></table>').extract_tables()[0]
     assert table['headers'] == ['col_1', 'col_2']
     assert table['row_count'] == 2
+
+
+def test_image_url_normalization():
+    parser = HTMLParser('<img src=" /cover.png "><img src="https://example.com/cover.png">'
+                        '<img src="data:image/png;base64,AAA"><img src="javascript:bad()">'
+                        '<img src="   " data-src="/lazy.png">', 'https://example.com/')
+    assert [x['src'] for x in parser.extract_images()] == [
+        'https://example.com/cover.png', 'https://example.com/lazy.png']
