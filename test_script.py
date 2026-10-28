@@ -55,3 +55,23 @@ def test_short_and_plain_text(html, expected):
 ])
 def test_nested_text_once(html, expected):
     assert HTMLParser(html).extract_clean_text()['paragraphs'] == expected
+
+
+def test_table_counts_and_row_headers():
+    table = HTMLParser('<table><tr><th>Name</th><th>Value</th></tr>'
+                       '<tr><th>A</th><td>1</td></tr><tr><th>B</th><td>2</td></tr></table>').extract_tables()[0]
+    assert table['headers'] == ['Name', 'Value']
+    assert table['rows'] == [['A', '1'], ['B', '2']]
+    assert table['row_count'] == 2
+    assert table['col_count'] == 2
+
+def test_nested_table_rows_not_counted_in_parent():
+    tables = HTMLParser('<table><tr><td>Outer<table><tr><td>Inner</td></tr></table>'
+                        '</td></tr></table>').extract_tables()
+    assert [t['row_count'] for t in tables] == [1, 1]
+
+def test_table_body_th_does_not_become_column_heading():
+    table = HTMLParser('<table><tr><td>A</td><td>1</td></tr>'
+                       '<tr><th>B</th><td>2</td></tr></table>').extract_tables()[0]
+    assert table['headers'] == ['col_1', 'col_2']
+    assert table['row_count'] == 2

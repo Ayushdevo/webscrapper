@@ -398,25 +398,24 @@ class HTMLParser:
             headers = []
             rows = []
 
-            # Headers from <th> or first row
-            th_tags = table.find_all("th")
-            if th_tags:
-                headers = [th.get_text(strip=True) for th in th_tags]
+            table_rows = [tr for tr in table.find_all("tr") if tr.find_parent("table") is table]
+            for row_index, tr in enumerate(table_rows):
+                cells = [cell for cell in tr.find_all(["td", "th"])
+                         if cell.find_parent("tr") is tr]
+                row = [cell.get_text(separator=" ", strip=True) for cell in cells]
+                if row_index == 0 and cells and all(cell.name == "th" for cell in cells):
+                    headers = row
+                elif row and any(row):
+                    rows.append(row)
 
-            for tr in table.find_all("tr"):
-                tds = tr.find_all(["td", "th"])
-                if tds:
-                    row = [td.get_text(strip=True) for td in tds]
-                    if row and any(cell for cell in row):
-                        rows.append(row)
-
-            if rows:
+            if rows or headers:
+                width = max([len(headers)] + [len(row) for row in rows])
                 tables.append({
                     "table_index": i + 1,
-                    "headers": headers or [f"col_{j+1}" for j in range(len(rows[0]))],
-                    "rows": rows[1:] if headers and rows and rows[0] == headers else rows,
+                    "headers": headers or [f"col_{j+1}" for j in range(width)],
+                    "rows": rows,
                     "row_count": len(rows),
-                    "col_count": len(rows[0]) if rows else 0,
+                    "col_count": width,
                 })
 
         log(f"Found {len(tables)} tables with data", "success")
