@@ -33,3 +33,15 @@ def test_only_http_links_with_hosts():
                         '<a href="https:///missing">Bad</a>'
                         '<a href="https://valid.example/x">Good</a>')
     assert [x['href'] for x in parser.extract_links()] == ['https://valid.example/x']
+
+
+@pytest.mark.parametrize('html, expected', [
+    ('<main><h1>Hi</h1><p>Short text.</p></main>', ['Hi', 'Short text.']),
+    ('<body>Plain body text</body>', ['Plain body text']),
+    ('<main><h6>Small heading</h6></main>', ['Small heading']),
+    ('<body><script>ignore()</script></body>', []),
+])
+def test_short_and_plain_text(html, expected):
+    result = HTMLParser(html).extract_clean_text()
+    assert result['paragraphs'] == expected
+    assert result['word_count'] == len(' '.join(expected).split())

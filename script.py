@@ -336,10 +336,14 @@ class HTMLParser:
 
         # Extract text preserving paragraph structure
         paragraphs = []
-        for el in target.find_all(["p", "h1", "h2", "h3", "h4", "h5", "li", "td", "blockquote"]):
+        for el in target.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "blockquote"]):
             txt = el.get_text(separator=" ", strip=True)
-            if len(txt) > 30:
+            if txt:
                 paragraphs.append(txt)
+        if not paragraphs:
+            text = target.get_text(separator=" ", strip=True)
+            if text:
+                paragraphs.append(text)
 
         clean = "\n\n".join(paragraphs)
         words = clean.split()
