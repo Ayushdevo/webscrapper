@@ -296,7 +296,9 @@ class HTMLParser:
                     types = [types]
                 if isinstance(types, list):
                     yield from (t for t in types if isinstance(t, str))
-                yield from types_in(value.get("@graph", []))
+                for key, nested in value.items():
+                    if key != "@type":
+                        yield from types_in(nested)
 
         meta["json_ld_types"] = list(dict.fromkeys(types_in(json_ld)))
 
