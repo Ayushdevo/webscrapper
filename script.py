@@ -198,7 +198,9 @@ def fetch_with_playwright(url: str, wait_ms: int = 2000, timeout: float = 20) ->
                 window.chrome = { runtime: {} };
             """)
             page = ctx.new_page()
-            page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+            response = page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+            if response is not None and not response.ok:
+                raise RuntimeError(f"HTTP {response.status} while rendering {url}")
             page.wait_for_timeout(wait_ms)
 
             # Auto-scroll to trigger lazy loading
