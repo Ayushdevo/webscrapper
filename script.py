@@ -125,6 +125,8 @@ class StealthSession:
     def __init__(self, timeout: int = 20, retries: int = 3):
         if not REQUESTS_OK:
             raise RuntimeError("requests + beautifulsoup4 not installed. Run: pip install requests beautifulsoup4 lxml")
+        if isinstance(retries, bool) or not isinstance(retries, int) or retries < 1:
+            raise ValueError("retries must be a positive integer")
         self.session = requests.Session()
         self.timeout = timeout
         self.retries = retries
