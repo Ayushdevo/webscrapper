@@ -262,21 +262,21 @@ class HTMLParser:
         meta["title"] = title_tag.get_text(separator=" ", strip=True) if title_tag else ""
 
         for name in ("description", "keywords", "author", "robots", "viewport"):
-            tag = self.soup.find("meta", attrs={"name": name})
+            tag = self.soup.find("meta", attrs={"name": re.compile(r"^" + re.escape(name) + r"$", re.I)})
             meta[name] = tag.get("content", "") if tag else ""
 
         # Open Graph
-        for og in self.soup.find_all("meta", attrs={"property": re.compile(r"^og:")}):
-            key = og.get("property", "").replace(":", "_")
+        for og in self.soup.find_all("meta", attrs={"property": re.compile(r"^og:", re.I)}):
+            key = og.get("property", "").lower().replace(":", "_")
             meta[key] = og.get("content", "")
 
         # Twitter Card
-        for tw in self.soup.find_all("meta", attrs={"name": re.compile(r"^twitter:")}):
-            key = tw.get("name", "").replace(":", "_")
+        for tw in self.soup.find_all("meta", attrs={"name": re.compile(r"^twitter:", re.I)}):
+            key = tw.get("name", "").lower().replace(":", "_")
             meta[key] = tw.get("content", "")
 
         # Canonical
-        canon = self.soup.find("link", rel="canonical")
+        canon = self.soup.find("link", rel=lambda value: value and "canonical" in value.lower().split())
         meta["canonical"] = urljoin(self.base_url, canon["href"]) if canon and canon.get("href") else ""
 
         # Structured data (JSON-LD)
