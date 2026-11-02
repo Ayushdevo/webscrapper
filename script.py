@@ -255,7 +255,7 @@ class HTMLParser:
     """BeautifulSoup-based page parser with smart extraction methods."""
 
     NOISE_TAGS = {"script", "style", "noscript", "iframe", "svg",
-                  "aside", "footer", "nav", "ads", "advertisement"}
+                  "aside", "footer", "nav", "ads", "advertisement", "template"}
     CONTENT_SELECTORS = [
         "article", "main", "[role='main']", ".content", "#content",
         ".post-content", ".entry-content", ".article-body", ".story-body",
@@ -359,6 +359,8 @@ class HTMLParser:
         # Remove noise elements
         soup_copy = BeautifulSoup(str(self.soup), "lxml")
         for tag in soup_copy(self.NOISE_TAGS):
+            tag.decompose()
+        for tag in soup_copy.select("[hidden]"):
             tag.decompose()
         for comment in soup_copy.find_all(string=lambda t: isinstance(t, Comment)):
             comment.extract()
