@@ -185,35 +185,37 @@ def fetch_with_playwright(url: str, wait_ms: int = 2000, timeout: float = 20) ->
                 "--disable-dev-shm-usage",
             ]
         )
-        ctx = browser.new_context(
-            user_agent=random.choice(USER_AGENTS),
-            viewport={"width": 1440, "height": 900},
-            extra_http_headers={k: v for k, v in STEALTH_HEADERS.items()},
-            java_script_enabled=True,
-        )
-        # Anti-detection: mask navigator.webdriver
-        ctx.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            window.chrome = { runtime: {} };
-        """)
-        page = ctx.new_page()
-        page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
-        page.wait_for_timeout(wait_ms)
+        try:
+            ctx = browser.new_context(
+                user_agent=random.choice(USER_AGENTS),
+                viewport={"width": 1440, "height": 900},
+                extra_http_headers={k: v for k, v in STEALTH_HEADERS.items()},
+                java_script_enabled=True,
+            )
+            # Anti-detection: mask navigator.webdriver
+            ctx.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                window.chrome = { runtime: {} };
+            """)
+            page = ctx.new_page()
+            page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+            page.wait_for_timeout(wait_ms)
 
-        # Auto-scroll to trigger lazy loading
-        page.evaluate("""
-            async () => {
-                for (let i = 0; i < 5; i++) {
-                    window.scrollBy(0, window.innerHeight);
-                    await new Promise(r => setTimeout(r, 400));
+            # Auto-scroll to trigger lazy loading
+            page.evaluate("""
+                async () => {
+                    for (let i = 0; i < 5; i++) {
+                        window.scrollBy(0, window.innerHeight);
+                        await new Promise(r => setTimeout(r, 400));
+                    }
+                    window.scrollTo(0, 0);
                 }
-                window.scrollTo(0, 0);
-            }
-        """)
-        html = page.content()
-        log(f"Playwright rendered {len(html):,} bytes (JS executed)", "success")
-        browser.close()
-        return html
+            """)
+            html = page.content()
+            log(f"Playwright rendered {len(html):,} bytes (JS executed)", "success")
+            return html
+        finally:
+            browser.close()
 
 
 # ═══════════════════════════════════════════════════════════════
