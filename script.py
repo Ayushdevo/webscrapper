@@ -236,6 +236,21 @@ def fetch_with_playwright(url: str, wait_ms: int = 2000, timeout: float = 20) ->
 # HTML PARSER & CLEANERS
 # ═══════════════════════════════════════════════════════════════
 
+def _resolve_http_url(base_url: str, reference: str) -> str:
+    """Resolve valid HTTP references; a malformed DOM attribute is skippable."""
+    try:
+        resolved = urljoin(base_url, reference.strip())
+        parsed = urlparse(resolved)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return ""
+        if any(char.isspace() for char in parsed.netloc):
+            return ""
+        parsed.port  # Validate port syntax and range.
+        return resolved
+    except ValueError:
+        return ""
+
+
 class HTMLParser:
     """BeautifulSoup-based page parser with smart extraction methods."""
 
@@ -250,8 +265,8 @@ class HTMLParser:
         self.soup = BeautifulSoup(html, "lxml")
         self.parsed_url = urlparse(base_url)
         base = self.soup.find("base", href=True)
-        candidate = urljoin(base_url, base["href"].strip()) if base else base_url
-        self.base_url = candidate if urlparse(candidate).scheme in ("http", "https") else base_url
+        self.base_url = _resolve_http_url(base_url, base["href"]) if base else base_url
+        self.base_url = self.base_url or base_url
 
     # ── Meta ────────────────────────────────────────────────────
     def extract_meta(self) -> dict:
@@ -316,10 +331,10 @@ class HTMLParser:
             if not href or href.startswith(("javascript:", "mailto:", "tel:", "#")):
                 continue
 
-            full_url = urljoin(self.base_url, href)
-            parsed = urlparse(full_url)
-            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            full_url = _resolve_http_url(self.base_url, href)
+            if not full_url:
                 continue
+            parsed = urlparse(full_url)
 
             if dedup and full_url in seen:
                 continue
@@ -456,9 +471,8 @@ class HTMLParser:
                         if value and value.strip()), "")
             if not src:
                 continue
-            full_src = urljoin(self.base_url, src)
-            parsed = urlparse(full_src)
-            if parsed.scheme not in ("http", "https") or not parsed.netloc or full_src in seen:
+            full_src = _resolve_http_url(self.base_url, src)
+            if not full_src or full_src in seen:
                 continue
             seen.add(full_src)
             images.append({
