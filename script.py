@@ -466,12 +466,9 @@ class HTMLParser:
         images = []
         seen = set()
         for img in self.soup.find_all("img"):
-            src = next((value.strip() for value in
-                        (img.get("src", ""), img.get("data-src", ""), img.get("data-lazy-src", ""))
-                        if value and value.strip()), "")
-            if not src:
-                continue
-            full_src = _resolve_http_url(self.base_url, src)
+            full_src = next((resolved for value in
+                             (img.get("src", ""), img.get("data-src", ""), img.get("data-lazy-src", ""))
+                             if value and value.strip() and (resolved := _resolve_http_url(self.base_url, value))), "")
             if not full_src or full_src in seen:
                 continue
             seen.add(full_src)
