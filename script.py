@@ -375,7 +375,8 @@ class HTMLParser:
 
         # Extract text preserving paragraph structure
         paragraphs = []
-        block_tags = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "blockquote"}
+        block_tags = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "blockquote",
+                      "div", "section", "header", "address", "pre", "br", "hr"}
 
         def collect(el):
             # Flush text around nested blocks so each visible string occurs once.
