@@ -797,8 +797,7 @@ class DataPulseScraper:
             raise ValueError(f"Unknown mode: {mode}")
         if export not in {None, "json", "csv", "txt", "md", "all"}:
             raise ValueError(f"Unknown export format: {export}")
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        if not _resolve_http_url("", url):
             raise ValueError("url must be an absolute HTTP or HTTPS URL")
         log(f"Target: {url}", "step")
         log(f"Mode: {mode.upper()}", "step")
