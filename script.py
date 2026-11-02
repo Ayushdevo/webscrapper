@@ -292,7 +292,7 @@ class HTMLParser:
 
         # Canonical
         canon = self.soup.find("link", rel=lambda value: value and "canonical" in value.lower().split())
-        meta["canonical"] = urljoin(self.base_url, canon["href"]) if canon and canon.get("href") else ""
+        meta["canonical"] = _resolve_http_url(self.base_url, canon["href"]) if canon and canon.get("href") else ""
 
         # Structured data (JSON-LD)
         json_ld = []
