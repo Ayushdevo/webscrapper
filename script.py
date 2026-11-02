@@ -864,7 +864,8 @@ class DataPulseScraper:
 
     # ── Batch scraping ───────────────────────────────────────────
     def batch_scrape(self, urls: list[str], mode: str = "auto",
-                     export: Optional[str] = None, delay: float = 1.5) -> list[dict]:
+                     export: Optional[str] = None, delay: float = 1.5,
+                     custom_prompt: str = "") -> list[dict]:
         """Scrape multiple URLs with polite delay between requests."""
         if not math.isfinite(delay) or delay < 0:
             raise ValueError("delay must be a finite nonnegative number")
@@ -875,7 +876,7 @@ class DataPulseScraper:
         for i, url in enumerate(urls, 1):
             log(f"[{i}/{total}] Processing: {url}", "info")
             try:
-                result = self.scrape(url, mode=mode, export=export)
+                result = self.scrape(url, mode=mode, export=export, custom_prompt=custom_prompt)
                 results.append(result)
             except Exception as e:
                 log(f"Failed: {url} — {e}", "error")
@@ -1003,7 +1004,7 @@ def main():
             sys.exit(1)
         log(f"Loaded {len(urls)} URLs from {args.batch}", "info")
         results = scraper.batch_scrape(urls, mode=args.mode,
-                                       export=args.export, delay=args.delay)
+                                       export=args.export, delay=args.delay, custom_prompt=args.prompt)
         if args.export:
             summary_path = Path(args.output_dir) / "batch_summary.json"
             with open(summary_path, "w", encoding="utf-8") as f:
