@@ -259,7 +259,7 @@ class HTMLParser:
         meta = {}
 
         title_tag = self.soup.find("title")
-        meta["title"] = title_tag.get_text(strip=True) if title_tag else ""
+        meta["title"] = title_tag.get_text(separator=" ", strip=True) if title_tag else ""
 
         for name in ("description", "keywords", "author", "robots", "viewport"):
             tag = self.soup.find("meta", attrs={"name": name})
@@ -325,7 +325,7 @@ class HTMLParser:
 
             link_type = "internal" if parsed.netloc == self.parsed_url.netloc else "external"
             links.append({
-                "text": a.get_text(strip=True)[:120] or "[no text]",
+                "text": a.get_text(separator=" ", strip=True)[:120] or "[no text]",
                 "href": full_url,
                 "type": link_type,
                 "rel": " ".join(a.get("rel", [])),
@@ -405,7 +405,7 @@ class HTMLParser:
         log("Extracting heading structure...", "step")
         headings = []
         for tag in self.soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
-            txt = tag.get_text(strip=True)
+            txt = tag.get_text(separator=" ", strip=True)
             if txt:
                 headings.append({"level": tag.name, "text": txt})
         log(f"Found {len(headings)} headings", "success")
