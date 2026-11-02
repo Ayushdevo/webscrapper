@@ -536,16 +536,16 @@ def extract_custom(parser: HTMLParser, prompt: str) -> dict:
         for txt in parser.soup.stripped_strings:
             found = price_re.findall(txt)
             prices.extend(found)
-        results["prices"] = list(set(prices))[:50]
+        results["prices"] = list(dict.fromkeys(prices))[:50]
 
     if any(kw in prompt_lower for kw in ["email", "contact", "mail"]):
         email_re = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
-        emails = list(set(email_re.findall(str(parser.soup))))
+        emails = list(dict.fromkeys(email_re.findall(str(parser.soup))))
         results["emails"] = emails
 
     if any(kw in prompt_lower for kw in ["phone", "number", "tel", "call"]):
         phone_re = re.compile(r'[\+\(]?[0-9][0-9\-\(\) ]{6,}[0-9]')
-        phones = list(set(phone_re.findall(str(parser.soup))))
+        phones = list(dict.fromkeys(phone_re.findall(str(parser.soup))))
         results["phones"] = phones[:30]
 
     if any(kw in prompt_lower for kw in ["image", "photo", "picture", "img"]):
