@@ -340,7 +340,7 @@ class HTMLParser:
                 continue
             seen.add(full_url)
 
-            link_type = "internal" if parsed.netloc == self.parsed_url.netloc else "external"
+            link_type = "internal" if parsed.hostname.casefold() == (self.parsed_url.hostname or "").casefold() else "external"
             links.append({
                 "text": a.get_text(separator=" ", strip=True)[:120] or "[no text]",
                 "href": full_url,
