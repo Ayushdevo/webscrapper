@@ -49,7 +49,7 @@ except ImportError:
 # ── Core scraping libs ────────────────────────────────────────
 try:
     import requests
-    from bs4 import BeautifulSoup, Comment
+    from bs4 import BeautifulSoup, Comment, UnicodeDammit
     REQUESTS_OK = True
 except ImportError:
     REQUESTS_OK = False
@@ -745,6 +745,11 @@ class DataPulseScraper:
         sess = StealthSession(timeout=self.timeout)
         try:
             resp = sess.get(url)
+            if isinstance(resp.content, bytes):
+                explicit = resp.encoding if "charset=" in resp.headers.get("Content-Type", "").lower() else None
+                decoded = UnicodeDammit(resp.content, is_html=True, known_definite_encodings=[explicit] if explicit else []).unicode_markup
+                if decoded is not None:
+                    return decoded
             return resp.text
         finally:
             sess.close()
