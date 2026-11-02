@@ -119,6 +119,15 @@ def banner():
 # HTTP FETCHER  (requests + stealth)
 # ═══════════════════════════════════════════════════════════════
 
+class _FetchedHTML(str):
+    """HTML string retaining the final response URL for relative references."""
+
+    def __new__(cls, html, url):
+        instance = super().__new__(cls, html)
+        instance.url = url
+        return instance
+
+
 class StealthSession:
     """Requests session with rotating UA and stealth headers."""
 
@@ -218,7 +227,7 @@ def fetch_with_playwright(url: str, wait_ms: int = 2000, timeout: float = 20) ->
             """)
             html = page.content()
             log(f"Playwright rendered {len(html):,} bytes (JS executed)", "success")
-            return html
+            return _FetchedHTML(html, page.url)
         finally:
             browser.close()
 
@@ -749,8 +758,8 @@ class DataPulseScraper:
                 explicit = resp.encoding if "charset=" in resp.headers.get("Content-Type", "").lower() else None
                 decoded = UnicodeDammit(resp.content, is_html=True, known_definite_encodings=[explicit] if explicit else []).unicode_markup
                 if decoded is not None:
-                    return decoded
-            return resp.text
+                    return _FetchedHTML(decoded, resp.url or url)
+            return _FetchedHTML(resp.text, resp.url if isinstance(resp.url, str) and resp.url else url)
         finally:
             sess.close()
 
@@ -783,7 +792,7 @@ class DataPulseScraper:
         html = self.fetch_html(url)
 
         # 2. Parse
-        parser = HTMLParser(html, base_url=url)
+        parser = HTMLParser(html, base_url=getattr(html, "url", url))
         log("DOM parsed successfully", "success")
 
         # 3. Extract by mode
