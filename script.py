@@ -1010,6 +1010,8 @@ def main():
             with open(summary_path, "w", encoding="utf-8") as f:
                 json.dump(results, f, indent=2, ensure_ascii=False)
             log(f"Batch summary saved → {summary_path}", "success")
+        if args.print_data:
+            print(json.dumps(results, indent=2, ensure_ascii=False))
         if any("error" in result for result in results):
             sys.exit(1)
 
