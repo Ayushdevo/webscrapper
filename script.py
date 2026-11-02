@@ -49,7 +49,7 @@ except ImportError:
 # ── Core scraping libs ────────────────────────────────────────
 try:
     import requests
-    from bs4 import BeautifulSoup, Comment
+    from bs4 import BeautifulSoup, Comment, UnicodeDammit
     REQUESTS_OK = True
 except ImportError:
     REQUESTS_OK = False
@@ -119,12 +119,23 @@ def banner():
 # HTTP FETCHER  (requests + stealth)
 # ═══════════════════════════════════════════════════════════════
 
+class _FetchedHTML(str):
+    """HTML string retaining the final response URL for relative references."""
+
+    def __new__(cls, html, url):
+        instance = super().__new__(cls, html)
+        instance.url = url
+        return instance
+
+
 class StealthSession:
     """Requests session with rotating UA and stealth headers."""
 
     def __init__(self, timeout: int = 20, retries: int = 3):
         if not REQUESTS_OK:
             raise RuntimeError("requests + beautifulsoup4 not installed. Run: pip install requests beautifulsoup4 lxml")
+        if isinstance(retries, bool) or not isinstance(retries, int) or retries < 1:
+            raise ValueError("retries must be a positive integer")
         self.session = requests.Session()
         self.timeout = timeout
         self.retries = retries
@@ -151,6 +162,7 @@ class StealthSession:
             except requests.exceptions.HTTPError as e:
                 log(f"HTTP error: {e}", "warn")
                 if resp.status_code in (403, 429) and attempt < self.retries:
+                    resp.close()
                     wait = 2 ** attempt
                     log(f"Rate-limited. Waiting {wait}s before retry...", "warn")
                     time.sleep(wait)
@@ -185,46 +197,65 @@ def fetch_with_playwright(url: str, wait_ms: int = 2000, timeout: float = 20) ->
                 "--disable-dev-shm-usage",
             ]
         )
-        ctx = browser.new_context(
-            user_agent=random.choice(USER_AGENTS),
-            viewport={"width": 1440, "height": 900},
-            extra_http_headers={k: v for k, v in STEALTH_HEADERS.items()},
-            java_script_enabled=True,
-        )
-        # Anti-detection: mask navigator.webdriver
-        ctx.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            window.chrome = { runtime: {} };
-        """)
-        page = ctx.new_page()
-        page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
-        page.wait_for_timeout(wait_ms)
+        try:
+            ctx = browser.new_context(
+                user_agent=random.choice(USER_AGENTS),
+                viewport={"width": 1440, "height": 900},
+                extra_http_headers={k: v for k, v in STEALTH_HEADERS.items()},
+                java_script_enabled=True,
+            )
+            # Anti-detection: mask navigator.webdriver
+            ctx.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                window.chrome = { runtime: {} };
+            """)
+            page = ctx.new_page()
+            response = page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+            if response is not None and not response.ok:
+                raise RuntimeError(f"HTTP {response.status} while rendering {url}")
+            page.wait_for_timeout(wait_ms)
 
-        # Auto-scroll to trigger lazy loading
-        page.evaluate("""
-            async () => {
-                for (let i = 0; i < 5; i++) {
-                    window.scrollBy(0, window.innerHeight);
-                    await new Promise(r => setTimeout(r, 400));
+            # Auto-scroll to trigger lazy loading
+            page.evaluate("""
+                async () => {
+                    for (let i = 0; i < 5; i++) {
+                        window.scrollBy(0, window.innerHeight);
+                        await new Promise(r => setTimeout(r, 400));
+                    }
+                    window.scrollTo(0, 0);
                 }
-                window.scrollTo(0, 0);
-            }
-        """)
-        html = page.content()
-        log(f"Playwright rendered {len(html):,} bytes (JS executed)", "success")
-        browser.close()
-        return html
+            """)
+            html = page.content()
+            log(f"Playwright rendered {len(html):,} bytes (JS executed)", "success")
+            return _FetchedHTML(html, page.url)
+        finally:
+            browser.close()
 
 
 # ═══════════════════════════════════════════════════════════════
 # HTML PARSER & CLEANERS
 # ═══════════════════════════════════════════════════════════════
 
+def _resolve_http_url(base_url: str, reference: str) -> str:
+    """Resolve valid HTTP references; a malformed DOM attribute is skippable."""
+    try:
+        resolved = urljoin(base_url, reference.strip())
+        parsed = urlparse(resolved)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return ""
+        if any(char.isspace() for char in parsed.netloc):
+            return ""
+        parsed.port  # Validate port syntax and range.
+        return resolved
+    except ValueError:
+        return ""
+
+
 class HTMLParser:
     """BeautifulSoup-based page parser with smart extraction methods."""
 
     NOISE_TAGS = {"script", "style", "noscript", "iframe", "svg",
-                  "aside", "footer", "nav", "ads", "advertisement"}
+                  "aside", "footer", "nav", "ads", "advertisement", "template"}
     CONTENT_SELECTORS = [
         "article", "main", "[role='main']", ".content", "#content",
         ".post-content", ".entry-content", ".article-body", ".story-body",
@@ -234,8 +265,8 @@ class HTMLParser:
         self.soup = BeautifulSoup(html, "lxml")
         self.parsed_url = urlparse(base_url)
         base = self.soup.find("base", href=True)
-        candidate = urljoin(base_url, base["href"].strip()) if base else base_url
-        self.base_url = candidate if urlparse(candidate).scheme in ("http", "https") else base_url
+        self.base_url = _resolve_http_url(base_url, base["href"]) if base else base_url
+        self.base_url = self.base_url or base_url
 
     # ── Meta ────────────────────────────────────────────────────
     def extract_meta(self) -> dict:
@@ -243,25 +274,25 @@ class HTMLParser:
         meta = {}
 
         title_tag = self.soup.find("title")
-        meta["title"] = title_tag.get_text(strip=True) if title_tag else ""
+        meta["title"] = title_tag.get_text(separator=" ", strip=True) if title_tag else ""
 
         for name in ("description", "keywords", "author", "robots", "viewport"):
-            tag = self.soup.find("meta", attrs={"name": name})
+            tag = self.soup.find("meta", attrs={"name": re.compile(r"^" + re.escape(name) + r"$", re.I)})
             meta[name] = tag.get("content", "") if tag else ""
 
         # Open Graph
-        for og in self.soup.find_all("meta", attrs={"property": re.compile(r"^og:")}):
-            key = og.get("property", "").replace(":", "_")
+        for og in self.soup.find_all("meta", attrs={"property": re.compile(r"^og:", re.I)}):
+            key = og.get("property", "").lower().replace(":", "_")
             meta[key] = og.get("content", "")
 
         # Twitter Card
-        for tw in self.soup.find_all("meta", attrs={"name": re.compile(r"^twitter:")}):
-            key = tw.get("name", "").replace(":", "_")
+        for tw in self.soup.find_all("meta", attrs={"name": re.compile(r"^twitter:", re.I)}):
+            key = tw.get("name", "").lower().replace(":", "_")
             meta[key] = tw.get("content", "")
 
         # Canonical
-        canon = self.soup.find("link", rel="canonical")
-        meta["canonical"] = urljoin(self.base_url, canon["href"]) if canon and canon.get("href") else ""
+        canon = self.soup.find("link", rel=lambda value: value and "canonical" in value.lower().split())
+        meta["canonical"] = _resolve_http_url(self.base_url, canon["href"]) if canon and canon.get("href") else ""
 
         # Structured data (JSON-LD)
         json_ld = []
@@ -280,7 +311,9 @@ class HTMLParser:
                     types = [types]
                 if isinstance(types, list):
                     yield from (t for t in types if isinstance(t, str))
-                yield from types_in(value.get("@graph", []))
+                for key, nested in value.items():
+                    if key != "@type":
+                        yield from types_in(nested)
 
         meta["json_ld_types"] = list(dict.fromkeys(types_in(json_ld)))
 
@@ -298,18 +331,18 @@ class HTMLParser:
             if not href or href.startswith(("javascript:", "mailto:", "tel:", "#")):
                 continue
 
-            full_url = urljoin(self.base_url, href)
-            parsed = urlparse(full_url)
-            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            full_url = _resolve_http_url(self.base_url, href)
+            if not full_url:
                 continue
+            parsed = urlparse(full_url)
 
             if dedup and full_url in seen:
                 continue
             seen.add(full_url)
 
-            link_type = "internal" if parsed.netloc == self.parsed_url.netloc else "external"
+            link_type = "internal" if parsed.hostname.casefold() == (self.parsed_url.hostname or "").casefold() else "external"
             links.append({
-                "text": a.get_text(strip=True)[:120] or "[no text]",
+                "text": a.get_text(separator=" ", strip=True)[:120] or "[no text]",
                 "href": full_url,
                 "type": link_type,
                 "rel": " ".join(a.get("rel", [])),
@@ -327,6 +360,8 @@ class HTMLParser:
         soup_copy = BeautifulSoup(str(self.soup), "lxml")
         for tag in soup_copy(self.NOISE_TAGS):
             tag.decompose()
+        for tag in soup_copy.select("[hidden]"):
+            tag.decompose()
         for comment in soup_copy.find_all(string=lambda t: isinstance(t, Comment)):
             comment.extract()
 
@@ -342,7 +377,8 @@ class HTMLParser:
 
         # Extract text preserving paragraph structure
         paragraphs = []
-        block_tags = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "blockquote"}
+        block_tags = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "blockquote",
+                      "div", "section", "header", "address", "pre", "br", "hr"}
 
         def collect(el):
             # Flush text around nested blocks so each visible string occurs once.
@@ -389,7 +425,7 @@ class HTMLParser:
         log("Extracting heading structure...", "step")
         headings = []
         for tag in self.soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
-            txt = tag.get_text(strip=True)
+            txt = tag.get_text(separator=" ", strip=True)
             if txt:
                 headings.append({"level": tag.name, "text": txt})
         log(f"Found {len(headings)} headings", "success")
@@ -433,14 +469,10 @@ class HTMLParser:
         images = []
         seen = set()
         for img in self.soup.find_all("img"):
-            src = next((value.strip() for value in
-                        (img.get("src", ""), img.get("data-src", ""), img.get("data-lazy-src", ""))
-                        if value and value.strip()), "")
-            if not src:
-                continue
-            full_src = urljoin(self.base_url, src)
-            parsed = urlparse(full_src)
-            if parsed.scheme not in ("http", "https") or not parsed.netloc or full_src in seen:
+            full_src = next((resolved for value in
+                             (img.get("src", ""), img.get("data-src", ""), img.get("data-lazy-src", ""))
+                             if value and value.strip() and (resolved := _resolve_http_url(self.base_url, value))), "")
+            if not full_src or full_src in seen:
                 continue
             seen.add(full_src)
             images.append({
@@ -504,16 +536,16 @@ def extract_custom(parser: HTMLParser, prompt: str) -> dict:
         for txt in parser.soup.stripped_strings:
             found = price_re.findall(txt)
             prices.extend(found)
-        results["prices"] = list(set(prices))[:50]
+        results["prices"] = list(dict.fromkeys(prices))[:50]
 
     if any(kw in prompt_lower for kw in ["email", "contact", "mail"]):
         email_re = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
-        emails = list(set(email_re.findall(str(parser.soup))))
+        emails = list(dict.fromkeys(email_re.findall(str(parser.soup))))
         results["emails"] = emails
 
     if any(kw in prompt_lower for kw in ["phone", "number", "tel", "call"]):
         phone_re = re.compile(r'[\+\(]?[0-9][0-9\-\(\) ]{6,}[0-9]')
-        phones = list(set(phone_re.findall(str(parser.soup))))
+        phones = list(dict.fromkeys(phone_re.findall(str(parser.soup))))
         results["phones"] = phones[:30]
 
     if any(kw in prompt_lower for kw in ["image", "photo", "picture", "img"]):
@@ -738,7 +770,12 @@ class DataPulseScraper:
         sess = StealthSession(timeout=self.timeout)
         try:
             resp = sess.get(url)
-            return resp.text
+            if isinstance(resp.content, bytes):
+                explicit = resp.encoding if "charset=" in resp.headers.get("Content-Type", "").lower() else None
+                decoded = UnicodeDammit(resp.content, is_html=True, known_definite_encodings=[explicit] if explicit else []).unicode_markup
+                if decoded is not None:
+                    return _FetchedHTML(decoded, resp.url or url)
+            return _FetchedHTML(resp.text, resp.url if isinstance(resp.url, str) and resp.url else url)
         finally:
             sess.close()
 
@@ -760,8 +797,7 @@ class DataPulseScraper:
             raise ValueError(f"Unknown mode: {mode}")
         if export not in {None, "json", "csv", "txt", "md", "all"}:
             raise ValueError(f"Unknown export format: {export}")
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        if not _resolve_http_url("", url):
             raise ValueError("url must be an absolute HTTP or HTTPS URL")
         log(f"Target: {url}", "step")
         log(f"Mode: {mode.upper()}", "step")
@@ -771,7 +807,7 @@ class DataPulseScraper:
         html = self.fetch_html(url)
 
         # 2. Parse
-        parser = HTMLParser(html, base_url=url)
+        parser = HTMLParser(html, base_url=getattr(html, "url", url))
         log("DOM parsed successfully", "success")
 
         # 3. Extract by mode
@@ -864,7 +900,8 @@ class DataPulseScraper:
 
     # ── Batch scraping ───────────────────────────────────────────
     def batch_scrape(self, urls: list[str], mode: str = "auto",
-                     export: Optional[str] = None, delay: float = 1.5) -> list[dict]:
+                     export: Optional[str] = None, delay: float = 1.5,
+                     custom_prompt: str = "") -> list[dict]:
         """Scrape multiple URLs with polite delay between requests."""
         if not math.isfinite(delay) or delay < 0:
             raise ValueError("delay must be a finite nonnegative number")
@@ -875,7 +912,7 @@ class DataPulseScraper:
         for i, url in enumerate(urls, 1):
             log(f"[{i}/{total}] Processing: {url}", "info")
             try:
-                result = self.scrape(url, mode=mode, export=export)
+                result = self.scrape(url, mode=mode, export=export, custom_prompt=custom_prompt)
                 results.append(result)
             except Exception as e:
                 log(f"Failed: {url} — {e}", "error")
@@ -1003,12 +1040,16 @@ def main():
             sys.exit(1)
         log(f"Loaded {len(urls)} URLs from {args.batch}", "info")
         results = scraper.batch_scrape(urls, mode=args.mode,
-                                       export=args.export, delay=args.delay)
+                                       export=args.export, delay=args.delay, custom_prompt=args.prompt)
         if args.export:
             summary_path = Path(args.output_dir) / "batch_summary.json"
             with open(summary_path, "w", encoding="utf-8") as f:
                 json.dump(results, f, indent=2, ensure_ascii=False)
             log(f"Batch summary saved → {summary_path}", "success")
+        if args.print_data:
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+        if any("error" in result for result in results):
+            sys.exit(1)
 
 
 # ═══════════════════════════════════════════════════════════════
