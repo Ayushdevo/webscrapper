@@ -304,7 +304,10 @@ class HTMLParser:
 
         # Structured data (JSON-LD)
         json_ld = []
-        for tag in self.soup.find_all("script", type="application/ld+json"):
+        for tag in self.soup.find_all(
+            "script", type=lambda value: isinstance(value, str)
+            and value.split(";", 1)[0].strip().casefold() == "application/ld+json"
+        ):
             try:
                 json_ld.append(json.loads(tag.string or "{}"))
             except Exception:
