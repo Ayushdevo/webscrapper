@@ -455,7 +455,9 @@ class HTMLParser:
             for row_index, tr in enumerate(table_rows):
                 cells = [cell for cell in tr.find_all(["td", "th"])
                          if cell.find_parent("tr") is tr]
-                row = [cell.get_text(separator=" ", strip=True) for cell in cells]
+                row = [" ".join(text.strip() for text in cell.strings
+                                if text.strip() and text.find_parent("table") is table)
+                       for cell in cells]
                 if row_index == 0 and cells and all(cell.name == "th" for cell in cells):
                     headers = row
                 elif row and any(row):
