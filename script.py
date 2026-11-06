@@ -136,6 +136,14 @@ class StealthSession:
             raise RuntimeError("requests + beautifulsoup4 not installed. Run: pip install requests beautifulsoup4 lxml")
         if isinstance(retries, bool) or not isinstance(retries, int) or retries < 1:
             raise ValueError("retries must be a positive integer")
+        try:
+            valid_timeout = (isinstance(timeout, (int, float))
+                             and not isinstance(timeout, bool)
+                             and math.isfinite(timeout) and timeout > 0)
+        except OverflowError:
+            valid_timeout = False
+        if not valid_timeout:
+            raise ValueError("timeout must be a finite positive number")
         self.session = requests.Session()
         self.timeout = timeout
         self.retries = retries
@@ -161,8 +169,8 @@ class StealthSession:
                 return resp
             except requests.exceptions.HTTPError as e:
                 log(f"HTTP error: {e}", "warn")
+                resp.close()
                 if resp.status_code in (403, 429) and attempt < self.retries:
-                    resp.close()
                     wait = 2 ** attempt
                     log(f"Rate-limited. Waiting {wait}s before retry...", "warn")
                     time.sleep(wait)
@@ -296,7 +304,10 @@ class HTMLParser:
 
         # Structured data (JSON-LD)
         json_ld = []
-        for tag in self.soup.find_all("script", type="application/ld+json"):
+        for tag in self.soup.find_all(
+            "script", type=lambda value: isinstance(value, str)
+            and value.split(";", 1)[0].strip().casefold() == "application/ld+json"
+        ):
             try:
                 json_ld.append(json.loads(tag.string or "{}"))
             except Exception:
@@ -441,10 +452,49 @@ class HTMLParser:
             rows = []
 
             table_rows = [tr for tr in table.find_all("tr") if tr.find_parent("table") is table]
+            carried = {}
+            previous_group = None
+
+            def span(cell, name, default=1):
+                try:
+                    value = int(cell.get(name, default))
+                except (TypeError, ValueError):
+                    return default
+                if value < 0 or (name == "colspan" and value == 0):
+                    return default
+                return min(value, 1000)
+
             for row_index, tr in enumerate(table_rows):
+                group = tr.find_parent(["thead", "tbody", "tfoot", "table"])
+                if group is not previous_group:
+                    carried.clear()
+                previous_group = group
+                occupied = {column: text for column, (text, _) in carried.items()}
+                carried = {column: (text, remaining - 1)
+                           for column, (text, remaining) in carried.items()
+                           if remaining > 1}
                 cells = [cell for cell in tr.find_all(["td", "th"])
                          if cell.find_parent("tr") is tr]
-                row = [cell.get_text(separator=" ", strip=True) for cell in cells]
+                column = 0
+                for cell in cells:
+                    width = span(cell, "colspan")
+                    while any(index in occupied for index in range(column, column + width)):
+                        column += 1
+                    text = " ".join(text.strip() for text in cell.strings
+                                    if text.strip() and text.find_parent("table") is table)
+                    height = span(cell, "rowspan")
+                    if height == 0:
+                        height = 1
+                        for following in table_rows[row_index + 1:]:
+                            if following.find_parent(["thead", "tbody", "tfoot", "table"]) is not group:
+                                break
+                            height += 1
+                    for index in range(column, column + width):
+                        occupied[index] = text
+                        if height > 1:
+                            carried[index] = (text, height - 1)
+                    column += width
+                row = [occupied.get(index, "") for index in range(max(occupied, default=-1) + 1)]
                 if row_index == 0 and cells and all(cell.name == "th" for cell in cells):
                     headers = row
                 elif row and any(row):
@@ -502,7 +552,7 @@ class HTMLParser:
     def _detect_lang(self, text: str) -> str:
         html_lang = self.soup.find("html")
         if html_lang and html_lang.get("lang"):
-            return html_lang.get("lang", "en")[:5]
+            return html_lang.get("lang", "en")
         return "en"
 
     # ── Auto (comprehensive) ────────────────────────────────────
@@ -642,9 +692,13 @@ class Exporter:
 
     def to_json(self, data: dict, url: str, mode: str) -> str:
         path = self._filename(url, mode, "json")
+        text = json.dumps(
+            {"url": url, "mode": mode, "scraped_at": datetime.now().isoformat(), "data": data},
+            indent=2, ensure_ascii=False, allow_nan=False,
+        )
+        text.encode("utf-8")  # Validate the complete payload before creating a file.
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"url": url, "mode": mode, "scraped_at": datetime.now().isoformat(),
-                       "data": data}, f, indent=2, ensure_ascii=False)
+            f.write(text)
         log(f"Saved JSON → {path}", "success")
         return str(path)
 
@@ -654,9 +708,11 @@ class Exporter:
         # Flatten to rows
         rows = []
         def flatten(obj, prefix=""):
-            if isinstance(obj, list):
+            if isinstance(obj, (dict, list)) and not obj:
+                rows.append({"key": prefix.rstrip("."), "value": json.dumps(obj)})
+            elif isinstance(obj, list):
                 for i, item in enumerate(obj):
-                    if isinstance(item, dict):
+                    if isinstance(item, (dict, list)):
                         flatten(item, f"{prefix}[{i}].")
                     else:
                         rows.append({"key": f"{prefix}[{i}]", "value": str(item)})
@@ -768,6 +824,7 @@ class DataPulseScraper:
         if self.use_playwright:
             return fetch_with_playwright(url, timeout=self.timeout)
         sess = StealthSession(timeout=self.timeout)
+        resp = None
         try:
             resp = sess.get(url)
             if isinstance(resp.content, bytes):
@@ -777,7 +834,11 @@ class DataPulseScraper:
                     return _FetchedHTML(decoded, resp.url or url)
             return _FetchedHTML(resp.text, resp.url if isinstance(resp.url, str) and resp.url else url)
         finally:
-            sess.close()
+            try:
+                if resp is not None:
+                    resp.close()
+            finally:
+                sess.close()
 
     def scrape(self, url: str, mode: str = "auto",
                custom_prompt: str = "", export: Optional[str] = None) -> dict:
