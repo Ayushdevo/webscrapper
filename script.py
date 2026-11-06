@@ -161,8 +161,8 @@ class StealthSession:
                 return resp
             except requests.exceptions.HTTPError as e:
                 log(f"HTTP error: {e}", "warn")
+                resp.close()
                 if resp.status_code in (403, 429) and attempt < self.retries:
-                    resp.close()
                     wait = 2 ** attempt
                     log(f"Rate-limited. Waiting {wait}s before retry...", "warn")
                     time.sleep(wait)
