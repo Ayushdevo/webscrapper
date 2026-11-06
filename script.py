@@ -667,7 +667,9 @@ class Exporter:
         # Flatten to rows
         rows = []
         def flatten(obj, prefix=""):
-            if isinstance(obj, list):
+            if isinstance(obj, (dict, list)) and not obj:
+                rows.append({"key": prefix.rstrip("."), "value": json.dumps(obj)})
+            elif isinstance(obj, list):
                 for i, item in enumerate(obj):
                     if isinstance(item, (dict, list)):
                         flatten(item, f"{prefix}[{i}].")
