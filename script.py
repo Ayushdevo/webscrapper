@@ -669,7 +669,7 @@ class Exporter:
         def flatten(obj, prefix=""):
             if isinstance(obj, list):
                 for i, item in enumerate(obj):
-                    if isinstance(item, dict):
+                    if isinstance(item, (dict, list)):
                         flatten(item, f"{prefix}[{i}].")
                     else:
                         rows.append({"key": f"{prefix}[{i}]", "value": str(item)})
