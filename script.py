@@ -776,6 +776,7 @@ class DataPulseScraper:
         if self.use_playwright:
             return fetch_with_playwright(url, timeout=self.timeout)
         sess = StealthSession(timeout=self.timeout)
+        resp = None
         try:
             resp = sess.get(url)
             if isinstance(resp.content, bytes):
@@ -785,7 +786,11 @@ class DataPulseScraper:
                     return _FetchedHTML(decoded, resp.url or url)
             return _FetchedHTML(resp.text, resp.url if isinstance(resp.url, str) and resp.url else url)
         finally:
-            sess.close()
+            try:
+                if resp is not None:
+                    resp.close()
+            finally:
+                sess.close()
 
     def scrape(self, url: str, mode: str = "auto",
                custom_prompt: str = "", export: Optional[str] = None) -> dict:
