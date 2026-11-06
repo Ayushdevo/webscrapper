@@ -452,12 +452,49 @@ class HTMLParser:
             rows = []
 
             table_rows = [tr for tr in table.find_all("tr") if tr.find_parent("table") is table]
+            carried = {}
+            previous_group = None
+
+            def span(cell, name, default=1):
+                try:
+                    value = int(cell.get(name, default))
+                except (TypeError, ValueError):
+                    return default
+                if value < 0 or (name == "colspan" and value == 0):
+                    return default
+                return min(value, 1000)
+
             for row_index, tr in enumerate(table_rows):
+                group = tr.find_parent(["thead", "tbody", "tfoot", "table"])
+                if group is not previous_group:
+                    carried.clear()
+                previous_group = group
+                occupied = {column: text for column, (text, _) in carried.items()}
+                carried = {column: (text, remaining - 1)
+                           for column, (text, remaining) in carried.items()
+                           if remaining > 1}
                 cells = [cell for cell in tr.find_all(["td", "th"])
                          if cell.find_parent("tr") is tr]
-                row = [" ".join(text.strip() for text in cell.strings
-                                if text.strip() and text.find_parent("table") is table)
-                       for cell in cells]
+                column = 0
+                for cell in cells:
+                    width = span(cell, "colspan")
+                    while any(index in occupied for index in range(column, column + width)):
+                        column += 1
+                    text = " ".join(text.strip() for text in cell.strings
+                                    if text.strip() and text.find_parent("table") is table)
+                    height = span(cell, "rowspan")
+                    if height == 0:
+                        height = 1
+                        for following in table_rows[row_index + 1:]:
+                            if following.find_parent(["thead", "tbody", "tfoot", "table"]) is not group:
+                                break
+                            height += 1
+                    for index in range(column, column + width):
+                        occupied[index] = text
+                        if height > 1:
+                            carried[index] = (text, height - 1)
+                    column += width
+                row = [occupied.get(index, "") for index in range(max(occupied, default=-1) + 1)]
                 if row_index == 0 and cells and all(cell.name == "th" for cell in cells):
                     headers = row
                 elif row and any(row):
