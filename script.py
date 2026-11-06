@@ -510,7 +510,7 @@ class HTMLParser:
     def _detect_lang(self, text: str) -> str:
         html_lang = self.soup.find("html")
         if html_lang and html_lang.get("lang"):
-            return html_lang.get("lang", "en")[:5]
+            return html_lang.get("lang", "en")
         return "en"
 
     # ── Auto (comprehensive) ────────────────────────────────────
