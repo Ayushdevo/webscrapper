@@ -655,9 +655,13 @@ class Exporter:
 
     def to_json(self, data: dict, url: str, mode: str) -> str:
         path = self._filename(url, mode, "json")
+        text = json.dumps(
+            {"url": url, "mode": mode, "scraped_at": datetime.now().isoformat(), "data": data},
+            indent=2, ensure_ascii=False, allow_nan=False,
+        )
+        text.encode("utf-8")  # Validate the complete payload before creating a file.
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"url": url, "mode": mode, "scraped_at": datetime.now().isoformat(),
-                       "data": data}, f, indent=2, ensure_ascii=False)
+            f.write(text)
         log(f"Saved JSON → {path}", "success")
         return str(path)
 
